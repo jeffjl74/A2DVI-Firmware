@@ -55,7 +55,7 @@ extern volatile compat_t detected_machine;
 extern volatile compat_t cfg_machine;
 extern volatile compat_t current_machine;
 
-extern    rendering_fx_t rendering_fx;
+extern    rendering_fx_t cfg_rendering_fx;
 
 typedef enum
 {
@@ -78,8 +78,10 @@ extern ToggleSwitchMode_t input_switch_mode;
 extern          uint32_t invalid_fonts;
 extern          uint8_t  cfg_local_charset;
 extern          uint8_t  cfg_alt_charset;
+extern          bool     videx_enabled;
 extern          uint8_t  cfg_videx_selection;
 extern volatile uint8_t  reload_charsets;
+extern volatile bool     reload_colors;
 
 extern volatile bool language_switch;
 
@@ -89,6 +91,7 @@ typedef enum {
     COLOR_MODE_AMBER = 2
 } color_mode_t;
 
+extern          uint8_t cfg_color_style;
 extern volatile uint8_t color_mode;
 
 #if 1

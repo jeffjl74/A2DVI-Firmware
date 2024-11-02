@@ -35,7 +35,7 @@ SOFTWARE.
 #include "menu.h"
 
 // number of elements in the menu
-#define MENU_ENTRY_COUNT (17)
+#define MENU_ENTRY_COUNT (18)
 
 // number of non-config elements in the two column menu area
 #define MENU_ENTRIES_NONCFG (6)
@@ -49,9 +49,9 @@ bool PrintModePage2    = false;
 #endif
 
 static uint8_t CurrentMenu        = 0;
-static bool    IgnoreNextKeypress = false;
+       bool    IgnoreNextKeypress = false;
 static bool    MenuNeedsRedraw;
-static bool    MenuSubTitleToggle;
+static uint8_t MenuSubTitleToggle;
 
 void __time_critical_func(centerY)(uint32_t y, const char* pMsg, TPrintMode PrintMode)
 {
@@ -139,27 +139,16 @@ void __time_critical_func(clearLine)(uint8_t line, TPrintMode PrintMode)
     }
 }
 
-void __time_critical_func(showTitle)(TPrintMode PrintMode)
-{
-    // initialize the screen buffer area
-    clearTextScreen();
+const char* DELAYED_COPY_DATA(TitleFirmware) =
+    "A2DVI - FIRMWARE V" FW_VERSION;
 
-    if (PrintMode == PRINTMODE_INVERSE)
-    {
-        clearLine(0, PrintMode);
-        clearLine(22, PrintMode);
-        clearLine(23, PrintMode);
-    }
+const char* DELAYED_COPY_DATA(TitleCopyright) =
+    "(C) 2024 THORSTEN BREHM, RALLE PALAVEEV ";
 
-    centerY(0,  "A2DVI - FIRMWARE V" FW_VERSION, PrintMode);
-
-    centerY(22, "(C) 2024 THORSTEN BREHM, RALLE PALAVEEV ", PrintMode);
-    if (MenuSubTitleToggle)
-        centerY(23, "GITHUB.COM/THORSTENBR/A2DVI-FIRMWARE", PrintMode);
-    else
-        centerY(23, "GITHUB.COM/RALLEPALAVEEV/A2DVI", PrintMode);
-}
-
+const char* DELAYED_COPY_DATA(TitleGitHub)[2] = {
+    "GITHUB.COM/RALLEPALAVEEV/A2DVI",
+    "  GITHUB.COM/THORSTENBR/A2DVI-FIRMWARE  "
+};
 
 const char* DELAYED_COPY_DATA(MachineNames)[MACHINE_MAX_CFG+1] =
 {
@@ -209,6 +198,14 @@ const char* DELAYED_COPY_DATA(MenuForcedMono)[2] =
 {
     "COLOR",
     "MONOCHROME"
+};
+
+
+const char* DELAYED_COPY_DATA(MenuColorStyle)[3] =
+{
+    "DEFAULT",
+    "ORIGINAL (IIE)",
+    "IMPROVED (IIGS/IIE)"
 };
 
 const char* DELAYED_COPY_DATA(MenuFontNames)[MAX_FONT_COUNT] =
@@ -263,6 +260,23 @@ const char* DELAYED_COPY_DATA(MenuVidex)[VIDEX_FONT_COUNT+1] =
     "SYMBOL"     //10
 };
 
+void __time_critical_func(showTitle)(TPrintMode PrintMode)
+{
+    // initialize the screen buffer area
+    clearTextScreen();
+
+    if (PrintMode == PRINTMODE_INVERSE)
+    {
+        clearLine( 0, PrintMode);
+        clearLine(22, PrintMode);
+        clearLine(23, PrintMode);
+    }
+
+    centerY( 0, TitleFirmware,                   PrintMode);
+    centerY(22, TitleCopyright,                  PrintMode);
+    centerY(23, TitleGitHub[MenuSubTitleToggle], PrintMode);
+}
+
 static void menuOption(uint8_t y, uint8_t Selection, const char* pMenu, const char* pValue)
 {
     uint x = (Selection >= (MENU_OFS_NONCFG+3)) ? 20:0;
@@ -284,12 +298,6 @@ void __time_critical_func(menuShowFrame)()
     centerY(21, "'ESC' TO EXIT", PRINTMODE_NORMAL);
 }
 
-void DELAYED_COPY_CODE(menuShowSaved)()
-{
-    menuShowFrame();
-    centerY(11, "SAVED!", PRINTMODE_NORMAL);
-}
-
 //   1234567890123456789012345678901234567890
 static const char* DELAYED_COPY_DATA(AboutText)[]=
 {
@@ -302,21 +310,63 @@ static const char* DELAYED_COPY_DATA(AboutText)[]=
     "THEN GENERATES 'TMDS'  ENCODED  RGB  BIT", //9
     "STREAMS (3X252MBIT/S) FOR DVI/HDMI.",      //10
     "",                                         //11
-    "MORE:",                                    //12
-    "     GITHUB.COM/RALLEPALAVEEV/A2DVI",      //13
-    "  GITHUB.COM/THORSTENBR/A2DVI-FIRMWARE",   //14
-    "",                                         //15
-    "A2DVI IS BASED ON PROJECTS 'APPLEII VGA'", //16
-    "(C) 2021 MARK AIKENS & DAVID KUDER,  AND", //17
-    "ON 'PICODVI' (C) 2021 LUKE WREN.",         //18
-    "  MANY THANKS TO ALL! APPLE II FOREVER!",  //19
-    "          THORSTEN AND RALLE",             //20
+    "MORE: GITHUB.COM/RALLEPALAVEEV/A2DVI",     //12
+    "   GITHUB.COM/THORSTENBR/A2DVI-FIRMWARE",  //13
+    "",                                         //14
+    "A2DVI IS BASED ON PROJECTS 'APPLEII VGA'", //15
+    "(C) 2021 MARK AIKENS & DAVID KUDER,  AND", //16
+    "ON 'PICODVI' (C) 2021 LUKE WREN.",         //17
+    "  MANY THANKS TO ALL! APPLE II FOREVER!",  //18
+    "",                                         //19
+    "           THORSTEN AND RALLE",            //20
     0
 };
+
+#define TEXT_OFFSET(line) ((((line) & 0x7) << 7) + ((((line) >> 3) & 0x3) * 40))
+
+void DELAYED_COPY_CODE(menuVideo7Text)()
+{
+    if ((internal_flags & (IFLAGS_IIE_REGS|IFLAGS_VIDEO7)) == (IFLAGS_IIE_REGS|IFLAGS_VIDEO7))
+    {
+        // initialize colors when Video 7 is enabled (on Apple //e)
+        soft_switches |= (SOFTSW_80STORE | SOFTSW_DGR);
+
+        for (uint line=0;line<24;line++)
+        {
+            uint ofs = TEXT_OFFSET(line);
+            uint8_t color;
+            switch(line)
+            {
+                case 0: // fall-through
+                case 22:// fall-through
+                case 23:color = 0x4F;break; // white, dark-green
+                case 21:color = 0xA2;break; // light gray, blue
+                default:color = 0xD2;break; // yellow, blue
+            }
+            for (uint i=0;i<40;i++)
+            {
+                text_p3[ofs+i] = color;
+            }
+        }
+    }
+    else
+    {
+        // Video 7 is disabled or Apple II only
+        soft_switches &= ~(SOFTSW_80STORE | SOFTSW_DGR);
+    }
+}
+
+void DELAYED_COPY_CODE(menuShowSaved)()
+{
+    menuShowFrame();
+    menuVideo7Text();
+    centerY(11, "SAVED!", PRINTMODE_NORMAL);
+}
 
 void DELAYED_COPY_CODE(menuShowAbout)()
 {
     menuShowFrame();
+    menuVideo7Text();
     for (uint y=0;AboutText[y];y++)
     {
         printXY(0,2+y, AboutText[y], PRINTMODE_NORMAL);
@@ -327,14 +377,14 @@ void DELAYED_COPY_CODE(menuShowTest)()
 {
     // initialize the screen buffer area
     clearTextScreen();
-    soft_switches &= ~(SOFTSW_TEXT_MODE|SOFTSW_PAGE_2);
+    soft_switches &= ~(SOFTSW_TEXT_MODE|SOFTSW_PAGE_2|SOFTSW_80STORE|SOFTSW_DGR);
     soft_switches |=  SOFTSW_MIX_MODE | SOFTSW_80COL;
 
     for (uint y=0;y<40;y++)
     {
         for (uint x=0;x<40;x++)
         {
-            uint8_t color = x&0xf;
+            uint8_t color = ((x/10)+(y/10)*4) & 0xf;
             uint8_t mask = 0xF0; // even rows in low nibble
             if ((y & 1) == 1)
             {
@@ -378,6 +428,7 @@ void int2str(uint32_t value, char* pStrBuf, uint32_t digits)
 void DELAYED_COPY_CODE(menuShowDebug)()
 {
     menuShowFrame();
+    menuVideo7Text();
 
     // show detected machine and slot
     {
@@ -397,7 +448,7 @@ void DELAYED_COPY_CODE(menuShowDebug)()
 
         // show statistics
         printXY(X1, 6, "BUS CYCLES:", PRINTMODE_NORMAL);
-        int2str(bus_counter, s, 14);
+        int2str(bus_cycle_counter, s, 14);
         printXY(X2, 6, s, PRINTMODE_NORMAL);
 
         printXY(X1,7, "BUS OVERFLOWS:", PRINTMODE_NORMAL);
@@ -575,29 +626,48 @@ bool DELAYED_COPY_CODE(menuDoSelection)(bool increase)
             SET_IFLAG(!IS_IFLAG(IFLAGS_FORCED_MONO), IFLAGS_FORCED_MONO);
             break;
         case 6:
-            SET_IFLAG(!IS_IFLAG(IFLAGS_SCANLINEEMU), IFLAGS_SCANLINEEMU);
-            break;
-        case 7:
             if (increase)
             {
-                if (rendering_fx < FX_DGR_ONLY)
-                    rendering_fx++;
+                if (cfg_color_style < 2)
+                {
+                    cfg_color_style++;
+                    reload_colors = true;
+                }
             }
             else
             {
-                if (rendering_fx > 0)
-                    rendering_fx--;
+                if (cfg_color_style > 0)
+                {
+                    cfg_color_style--;
+                    reload_colors = true;
+                }
+            }
+
+            break;
+        case 7:
+            SET_IFLAG(!IS_IFLAG(IFLAGS_SCANLINEEMU), IFLAGS_SCANLINEEMU);
+            break;
+        case 8:
+            if (increase)
+            {
+                if (cfg_rendering_fx < FX_DGR_ONLY)
+                    cfg_rendering_fx++;
+            }
+            else
+            {
+                if (cfg_rendering_fx > 0)
+                    cfg_rendering_fx--;
             }
             config_setflags();
             break;
-        case 8:
+        case 9:
             SET_IFLAG(!IS_IFLAG(IFLAGS_VIDEO7), IFLAGS_VIDEO7);
             if (IS_IFLAG(IFLAGS_VIDEO7))
             {
                 soft_switches |= SOFTSW_V7_MODE3;
             }
             break;
-        case 9:
+        case 10:
             if (increase)
             {
                 if (cfg_videx_selection < VIDEX_FONT_COUNT)
@@ -615,9 +685,10 @@ bool DELAYED_COPY_CODE(menuDoSelection)(bool increase)
                         reload_charsets |= 4;
                 }
             }
-            SET_IFLAG((cfg_videx_selection>0), IFLAGS_VIDEX);
+            // videx not supported on IIe/IIgs
+            videx_enabled = (cfg_videx_selection>0)&&((internal_flags & (IFLAGS_IIGS_REGS|IFLAGS_IIE_REGS)) == 0);
             break;
-        case 10:
+        case 11:
             SET_IFLAG(!IS_IFLAG(IFLAGS_DEBUG_LINES), IFLAGS_DEBUG_LINES);
             SET_IFLAG(0, IFLAGS_TEST);
             break;
@@ -692,8 +763,11 @@ static inline bool menuCheckKeys(char key)
             if ((!LANGUAGE_SWITCH_ENABLED())&&(CurrentMenu == 3))
                 CurrentMenu = 2;
             break;
-        case 'D':
+        case 'X':
             CurrentMenu = 10;
+            break;
+        case 'D':
+            CurrentMenu = 11;
             break;
         case 'R':
             CurrentMenu = MENU_OFS_NONCFG+0;
@@ -774,8 +848,9 @@ static inline bool menuCheckKeys(char key)
             }
             break;
         case 27: // ESCAPE
-            // clear menu mode when exiting
-            SET_IFLAG(0, IFLAGS_MENU_ENABLE);
+            // clear menu, Video 7 and MIX modes when exiting, enable TEXT mode
+            soft_switches &= ~(SOFTSW_MENU_ENABLE | SOFTSW_MIX_MODE | SOFTSW_80COL | SOFTSW_80STORE | SOFTSW_DGR);
+            soft_switches |= SOFTSW_TEXT_MODE;
             // abort the menu: do not redraw
             return true;
         case '!': // special debug feature
@@ -805,7 +880,7 @@ void DELAYED_COPY_CODE(menuShow)(char key)
         CurrentMenu = 0;
         MenuNeedsRedraw = true;
         IgnoreNextKeypress = false;
-        MenuSubTitleToggle = (bus_counter & 1);
+        MenuSubTitleToggle = (bus_cycle_counter & 1);
     }
     else
     if (key == 1)
@@ -830,36 +905,42 @@ void DELAYED_COPY_CODE(menuShow)(char key)
     if (MenuNeedsRedraw)
     {
         menuShowFrame();
+        menuVideo7Text();
         MenuNeedsRedraw = false;
     }
-    centerY(2, "- CONFIGURATION MENU -", PRINTMODE_NORMAL);
+    uint Y=1;
+    centerY(Y++, "- CONFIGURATION MENU -", PRINTMODE_NORMAL);
+    Y++;
 
     //                0123456789012345678
-    menuOption(4,0,  "0 MACHINE TYPE:",       (cfg_machine <= MACHINE_MAX_CFG) ? MachineNames[cfg_machine] : "AUTO DETECT");
-    menuOption(5,1,  "1 CHARACTER SET:",      (cfg_local_charset < MAX_FONT_COUNT) ? MenuFontNames[cfg_local_charset] : "?");
-    menuOption(6,2,  "2 ALTCHR SWITCH:",      MenuButtonModes[input_switch_mode]);
+    menuOption(Y++,0,  "0 MACHINE TYPE:",       (cfg_machine <= MACHINE_MAX_CFG) ? MachineNames[cfg_machine] : "AUTO DETECT");
+    menuOption(Y++,1,  "1 CHARACTER SET:",      (cfg_local_charset < MAX_FONT_COUNT) ? MenuFontNames[cfg_local_charset] : "?");
+    menuOption(Y++,2,  "2 ALTCHR SWITCH:",      MenuButtonModes[input_switch_mode]);
     if ((input_switch_mode == ModeSwitchLanguage)||
         (input_switch_mode == ModeSwitchLangMonochrome)||
         (input_switch_mode == ModeSwitchLangCycle))
     {
-        menuOption(7,3, "3 US CHARACTER SET:", (cfg_alt_charset < MAX_FONT_COUNT) ? MenuFontNames[cfg_alt_charset] : "?");
+        menuOption(Y,3, "3 US CHARACTER SET:", (cfg_alt_charset < MAX_FONT_COUNT) ? MenuFontNames[cfg_alt_charset] : "?");
     }
+    Y++;
+    Y++;
 
-    menuOption( 9,4,  "4 MONOCHROME MODE:",  MenuColorMode[color_mode]);
-    menuOption(10,5,  "5 COLOR MODE:",       MenuForcedMono[IS_IFLAG(IFLAGS_FORCED_MONO)]);
-    menuOption(11,6,  "6 SCAN LINES:",       MenuOnOff[IS_IFLAG(IFLAGS_SCANLINEEMU)]);
-    menuOption(12,7,  "7 ANALOG RENDER FX:", MenuRendering[rendering_fx]);
-    menuOption(13,8,  "8 VIDEO7 (IIE):",     MenuOnOff[IS_IFLAG(IFLAGS_VIDEO7)]);
-    menuOption(14,9,  "9 VIDEX  (II/II+):",  MenuVidex[cfg_videx_selection]);
-    menuOption(15,10, "D DEBUG MONITOR:",    MenuOnOff[IS_IFLAG(IFLAGS_DEBUG_LINES)]);
+    menuOption(Y++,4,  "4 MONOCHROME MODE:",  MenuColorMode[color_mode]);
+    menuOption(Y++,5,  "5 COLOR MODE:",       MenuForcedMono[IS_IFLAG(IFLAGS_FORCED_MONO)]);
+    menuOption(Y++,6,  "6 RGB COLOR STYLE:",  MenuColorStyle[cfg_color_style]);
+    menuOption(Y++,7,  "7 SCAN LINES:",       MenuOnOff[IS_IFLAG(IFLAGS_SCANLINEEMU)]);
+    menuOption(Y++,8,  "8 ANALOG RENDER FX:", MenuRendering[cfg_rendering_fx]);
+    menuOption(Y++,9,  "9 VIDEO7 (IIE):",     MenuOnOff[IS_IFLAG(IFLAGS_VIDEO7)]);
+    menuOption(Y++,10, "X VIDEX  (II/II+):",  MenuVidex[cfg_videx_selection]);
+    menuOption(Y++,11, "D DEBUG MONITOR:",    MenuOnOff[IS_IFLAG(IFLAGS_DEBUG_LINES)]);
 
-    menuOption(17,11, "R RESTORE DEFAULTS",  0);
-    menuOption(18,12, "L LOAD FROM FLASH",   0);
-    menuOption(19,13, "S SAVE TO FLASH",     0);
+    menuOption(Y+1,12, "R RESTORE DEFAULTS",  0);
+    menuOption(Y+2,13, "L LOAD FROM FLASH",   0);
+    menuOption(Y+3,14, "S SAVE TO FLASH",     0);
 
-    menuOption(17,14, "A ABOUT",             0);
-    menuOption(18,15, "B DEBUG",             0);
-    menuOption(19,16, "T TEST",              0);
+    menuOption(Y+1,15, "A ABOUT",             0);
+    menuOption(Y+2,16, "B DEBUG",             0);
+    menuOption(Y+3,17, "T TEST",              0);
 
     // show some special characters, for immediate feedback when selecting character sets
     printXY(40-11, 21, "[{\\~#$`^|}]", PRINTMODE_NORMAL);

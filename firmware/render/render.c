@@ -242,7 +242,7 @@ static void update_toggle_switch()
     debounce_last = input_switch_state;
 
     // when cycling through the video modes, we need to update the menu when it's on display
-    if ((IS_IFLAG(IFLAGS_MENU_ENABLE) && (input_switch_mode != ModeSwitchLanguage)))
+    if (IS_SOFTSWITCH(SOFTSW_MENU_ENABLE) && (input_switch_mode != ModeSwitchLanguage) && (!IgnoreNextKeypress))
     {
         menuShow(1);
     }
@@ -250,21 +250,25 @@ static void update_toggle_switch()
 
 static void update_led()
 {
-    static uint32_t last_bus_counter;
-    if (bus_counter != last_bus_counter) // 6502 is also alive
+    static uint32_t last_bus_cycle_counter;
+    if (bus_cycle_counter != last_bus_cycle_counter) // 6502 is also alive
     {
         gpio_xor_mask(1u << PICO_DEFAULT_LED_PIN);
-        last_bus_counter = bus_counter;
+        last_bus_cycle_counter = bus_cycle_counter;
     }
 }
 
 void DELAYED_COPY_CODE(render_loop)()
 {
+    // show splash/diagnostic screen
+    render_splash();
+
     for(;;)
     {
         // copy soft switches - since we need consistent settings throughout a rendering cycle
         uint32_t current_softsw = soft_switches;
         bool IsVidex = ((current_softsw & (SOFTSW_TEXT_MODE|SOFTSW_VIDEX_80COL)) == (SOFTSW_TEXT_MODE|SOFTSW_VIDEX_80COL));
+#ifndef FEATURE_TEST_TMDS
         render_debug(IsVidex, true);
 
         // set flag when monochrome rendering is requested
@@ -272,7 +276,17 @@ void DELAYED_COPY_CODE(render_loop)()
 
         // prepare state indicating whether the current display mode supports colors
         color_support = (current_softsw & SOFTSW_MONOCHROME) ? false : true;
-
+#else
+        // no scanlines/no videx when running the TMDS test
+        internal_flags &= ~IFLAGS_SCANLINEEMU;
+        IsVidex = false;
+        render_debug(IsVidex, true);
+        if (1)
+        {
+            render_tmds_test();
+        }
+        else
+#endif
         if (IsVidex)
             render_videx_text();
         else
@@ -321,6 +335,15 @@ void DELAYED_COPY_CODE(render_loop)()
                     break;
                 default:
                     render_text();
+                    if (reload_charsets)
+                    {
+                        config_load_charsets();
+                    }
+                    else
+                    if (reload_colors)
+                    {
+                        tmds_color_load();
+                    }
                     break;
             }
         }

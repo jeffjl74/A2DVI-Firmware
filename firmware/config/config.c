@@ -33,6 +33,7 @@ SOFTWARE.
 #include "applebus/buffers.h"
 #include "util/dmacopy.h"
 #include "fonts/textfont.h"
+#include "videx/videx_vterm.h"
 
 volatile compat_t  detected_machine = MACHINE_AUTO;
 volatile compat_t  cfg_machine = MACHINE_AUTO;
@@ -40,13 +41,16 @@ volatile compat_t  current_machine = MACHINE_AUTO;
 volatile bool      language_switch = false; // false: main/local char set, true: alternate char set (normally fixed to US default)
 volatile bool      unenhance_font; // switch to explicitly "unenhance" a font (by removing the mouse text characters)
 volatile uint8_t   reload_charsets = 4;
+volatile bool      reload_colors;
 
+bool               videx_enabled;
 uint8_t            cfg_videx_selection = 0; //0:DISABLED
 uint8_t            cfg_local_charset = 0;
 uint8_t            cfg_alt_charset   = 0;
 uint32_t           invalid_fonts = 0xffffffff;
+uint8_t            cfg_color_style;
 volatile uint8_t   color_mode = 1;
-rendering_fx_t     rendering_fx = FX_ENABLED;
+rendering_fx_t     cfg_rendering_fx = FX_ENABLED;
 ToggleSwitchMode_t input_switch_mode = ModeSwitchCycleVideo;
 
 // A block of flash is reserved for storing configuration persistently across power cycles
@@ -83,6 +87,7 @@ struct __attribute__((__packed__)) config_t
     uint8_t  test_mode_enabled;
     rendering_fx_t rendering_fx;
     uint8_t  videx_selection;
+    uint8_t  color_style;
 
     // Add new fields after here. When reading the config use the IS_STORED_IN_CONFIG macro
     // to determine if the field you're looking for is actually present in the stored config.
@@ -159,11 +164,15 @@ void __time_critical_func(set_machine)(compat_t machine)
         case MACHINE_IIE_ENH:
             internal_flags &= ~IFLAGS_IIGS_REGS;
             internal_flags |=  IFLAGS_IIE_REGS;
+        #if VIDEX_SLOT != 1
+            videx_enabled = false;
+        #endif
             break;
 #ifdef MACHINE_IIGS
         case MACHINE_IIGS:
             internal_flags &= ~IFLAGS_IIE_REGS;
             internal_flags |=  IFLAGS_IIGS_REGS;
+            videx_enabled = false;
             break;
 #endif
         case MACHINE_AUTO:
@@ -294,8 +303,10 @@ void DELAYED_COPY_CODE(config_load_charsets)(void)
 
 void config_setflags(void)
 {
-    SET_IFLAG(((rendering_fx==FX_ENABLED)||(rendering_fx == FX_DGR_ONLY)), IFLAGS_INTERP_DGR);
-    SET_IFLAG(((rendering_fx==FX_ENABLED)||(rendering_fx == FX_DHGR_ONLY)),IFLAGS_INTERP_DHGR);
+    SET_IFLAG(((cfg_rendering_fx==FX_ENABLED)||(cfg_rendering_fx == FX_DGR_ONLY)), IFLAGS_INTERP_DGR);
+    SET_IFLAG(((cfg_rendering_fx==FX_ENABLED)||(cfg_rendering_fx == FX_DHGR_ONLY)),IFLAGS_INTERP_DHGR);
+
+    videx_enabled = (cfg_videx_selection > 0);
 }
 
 void config_load(void)
@@ -317,7 +328,6 @@ void config_load(void)
         // convert old config setting
         cfg_machine = MACHINE_IIE_ENH;
     }
-    set_machine(cfg_machine);
 
     SET_IFLAG(cfg->scanline_emulation,   IFLAGS_SCANLINEEMU);
     SET_IFLAG(cfg->forced_monochrome,    IFLAGS_FORCED_MONO);
@@ -327,14 +337,19 @@ void config_load(void)
     if (IS_STORED_IN_CONFIG(cfg, videx_selection))
     {
         cfg_videx_selection = cfg->videx_selection;
-        SET_IFLAG(cfg_videx_selection>0, IFLAGS_VIDEX);
     }
     if(IS_STORED_IN_CONFIG(cfg, rendering_fx))
     {
-        rendering_fx = cfg->rendering_fx;
+        cfg_rendering_fx = cfg->rendering_fx;
+    }
+
+    if(IS_STORED_IN_CONFIG(cfg, color_style))
+    {
+        cfg_color_style = cfg->color_style;
     }
 
     config_setflags();
+    set_machine(cfg_machine);
 
     input_switch_mode = cfg->input_switch_mode;
     unenhance_font = (cfg_machine == MACHINE_IIE);
@@ -351,6 +366,9 @@ void config_load(void)
 
     // load both character sets
     reload_charsets |= 3;
+
+    // reload color palette
+    reload_colors = true;
 }
 
 void config_load_defaults(void)
@@ -360,20 +378,21 @@ void config_load_defaults(void)
     SET_IFLAG(0, IFLAGS_FORCED_MONO);
     SET_IFLAG(1, IFLAGS_VIDEO7);
     SET_IFLAG(0, IFLAGS_TEST);
-    rendering_fx = FX_ENABLED;
-    config_setflags();
 
+    cfg_color_style         = 2; // improved
     color_mode              = COLOR_MODE_BW;
     cfg_machine             = MACHINE_AUTO;
-    set_machine(detected_machine);
 
     input_switch_mode       = ModeSwitchLangCycle;
     unenhance_font          = false;
+    cfg_rendering_fx        = FX_ENABLED;
 
     cfg_local_charset       = DEFAULT_LOCAL_CHARSET;
     cfg_alt_charset         = DEFAULT_ALT_CHARSET;
     cfg_videx_selection     = 0;
-    SET_IFLAG((cfg_videx_selection>0), IFLAGS_VIDEX);
+
+    config_setflags();
+    set_machine(detected_machine);
 
     // reload both character sets
     reload_charsets |= 3;
@@ -398,7 +417,8 @@ void DELAYED_COPY_CODE(config_save)(void)
     new_config->debug_lines_enabled     = IS_IFLAG(IFLAGS_DEBUG_LINES);
     new_config->test_mode_enabled       = IS_IFLAG(IFLAGS_TEST);
     new_config->videx_selection         = cfg_videx_selection;
-    new_config->rendering_fx            = rendering_fx;
+    new_config->rendering_fx            = cfg_rendering_fx;
+    new_config->color_style             = cfg_color_style;
     new_config->color_mode              = color_mode;
     new_config->machine_type            = cfg_machine;
     new_config->local_charset           = cfg_local_charset;

@@ -27,10 +27,12 @@ SOFTWARE.
 #include "config/config.h"
 
 #include "render.h"
+#include "menu/menu.h"
+#include "dvi/a2dvi.h"
 
 uint32_t show_subtitle_cycles;
 
-void int2hex(uint8_t* pStrBuf, uint32_t value, uint32_t digits)
+void DELAYED_COPY_CODE(int2hex)(uint8_t* pStrBuf, uint32_t value, uint32_t digits)
 {
     for (int32_t i=0;i<digits;i++)
     {
@@ -120,7 +122,7 @@ void DELAYED_COPY_CODE(update_debug_monitor)(void)
             if (IS_SOFTSWITCH(SOFTSW_SLOT3ROM))
                 copy_str(&line2[24], "C3ROM");
 
-            if (IS_SOFTSWITCH(SOFTSW_CXROM))
+            if (IS_SOFTSWITCH(SOFTSW_INTCXROM))
                  copy_str(&line2[30], "CXROM");
 
             if (IS_SOFTSWITCH(SOFTSW_IOUDIS))

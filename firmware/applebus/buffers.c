@@ -27,7 +27,7 @@ SOFTWARE.
 #include "buffers.h"
 
 volatile uint32_t reset_counter;
-volatile uint32_t bus_counter;
+volatile uint32_t bus_cycle_counter;
 volatile uint32_t bus_overflow_counter;
 volatile uint32_t frame_counter;
 volatile uint32_t devicereg_counter;
@@ -37,6 +37,7 @@ volatile uint32_t vblank_counter;
 volatile uint16_t last_address_stack;
 volatile uint16_t last_address_pc;
 volatile uint16_t last_address_zp;
+volatile uint32_t last_read_address;
 
          uint32_t boot_time;
 #ifdef FEATURE_DEBUG_COUNTER
@@ -48,8 +49,6 @@ volatile uint32_t soft_switches  = SOFTSW_TEXT_MODE  | SOFTSW_V7_MODE3;
 volatile uint32_t internal_flags = IFLAGS_INTERP_DGR | IFLAGS_INTERP_DHGR;
 
 volatile uint8_t  cardslot;
-
-volatile uint8_t reset_state = 0;
 
 uint8_t __attribute__((section (".appledata."))) apple_memory[MAX_ADDRESS];
 uint8_t __attribute__((section (".appledata."))) private_memory[MAX_ADDRESS];

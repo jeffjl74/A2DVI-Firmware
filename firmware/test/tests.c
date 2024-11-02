@@ -34,7 +34,6 @@ SOFTWARE.
 #include "menu/menu.h"
 #include "applebus/abus.h"
 #include "applebus/buffers.h"
-#include "applebus/businterface.h"
 #include "applebus/abus_pin_config.h"
 #include "render/render.h"
 #include "config/config.h"
@@ -69,8 +68,6 @@ SOFTWARE.
 
 #define REG_CARD          (0xc080 | 0x30)
 
-
-//#define TEST_TMDS
 
 #ifndef TEST_TMDS
 #define TEST_40_COLUMNS
@@ -107,17 +104,17 @@ static void simulateWrite(uint16_t address, uint8_t data)
     uint32_t card_select = (1u << (CONFIG_PIN_APPLEBUS_SELECT - CONFIG_PIN_APPLEBUS_DATA_BASE));
     if ((address & 0xCFF0) == (0xC080+0x10*SimulatedSlotNr)) // Slot register area
         card_select = 0;
-    businterface((address << 11) | data | card_select);
+    abus_interface((address << 10) | card_select | data);
 }
 
 // simulate a read access with given address
 static void simulateRead(uint16_t address)
 {
     uint32_t card_select = (1u << (CONFIG_PIN_APPLEBUS_SELECT - CONFIG_PIN_APPLEBUS_DATA_BASE));
-    uint32_t read_mode   = (1u << (CONFIG_PIN_APPLEBUS_RW - CONFIG_PIN_APPLEBUS_DATA_BASE));
+    uint32_t read_mode   = (1u << (CONFIG_PIN_APPLEBUS_RW     - CONFIG_PIN_APPLEBUS_DATA_BASE));
     if ((address & 0xCFF0) == (0xC080+0x10*SimulatedSlotNr)) // Slot register area
         card_select = 0;
-    businterface((address << 11) | 0x0 | card_select | read_mode);
+    abus_interface((address << 10) | card_select | read_mode);
 }
 
 void sleep(int Milliseconds)
@@ -472,10 +469,14 @@ void testHires()
 void test_videx()
 {
 #ifdef TEST_VIDEX
-    uint32_t saved_flags = internal_flags;
-
-    internal_flags &= ~ IFLAGS_IIE_REGS;
-    internal_flags |=  IFLAGS_VIDEX;
+    bool saved_videx_enabled = videx_enabled;
+    if (!videx_enabled)
+    {
+        // temporarily enable the Videx support and load the Videx fonts
+        videx_enabled = true;
+        cfg_videx_selection = 1;
+        reload_charsets |= 4;
+    }
 
     simulateRead(REG_SW_VIDEX_ON);
 
@@ -495,7 +496,7 @@ void test_videx()
     sleep(TestDelayMilliseconds);
     simulateRead(REG_SW_VIDEX_OFF);
 
-    internal_flags = saved_flags;
+    videx_enabled = saved_videx_enabled;
 #endif
 }
 
@@ -535,7 +536,7 @@ void test_menu()
 #endif
 }
 
-#ifdef TEST_TMDS
+#ifdef FEATURE_TEST_TMDS
 void render_tmds_test()
 {
     static uint32_t count = 0;
@@ -547,9 +548,9 @@ void render_tmds_test()
     for(uint y=0; y < 192; y++)
     {
         dvi_get_scanline(tmdsbuf);
-        dvi_scanline_rgb(tmdsbuf, tmdsbuf_red, tmdsbuf_green, tmdsbuf_blue);
+        dvi_scanline_rgb640(tmdsbuf, tmdsbuf_red, tmdsbuf_green, tmdsbuf_blue);
 
-        for(uint col=0; col < 280;col++)
+        for(uint col=0; col < 320;col++)
         {
             uint16_t symbol = 0;
             //if ((y<=113)&&(y>=112))
@@ -653,6 +654,15 @@ void test_loop()
 {
     // initialize the Apple II bus interface
     abus_init();
+
+    // simulate reset to pass the splash screen diagnostics
+    simulateRead(0xFFFC);
+    simulateRead(0xFFFD);
+    simulateRead(0xFA62);
+    for (uint i=0;i<6*1000*1000;i++)
+    {
+        simulateRead(0);
+    }
 
     // unlock register area
     simulateWrite(REG_CARD+0xf, 11);

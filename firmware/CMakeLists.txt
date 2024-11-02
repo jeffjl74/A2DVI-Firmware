@@ -17,7 +17,7 @@ set(PICO_BOARD pico CACHE STRING "Board type")
 cmake_minimum_required(VERSION 3.18)
 
 # firmware version
-set(FW_VERSION "1.4")
+set(FW_VERSION "1.5")
 message(STATUS "Building firmware version ${FW_VERSION}")
 
 option(FEATURE_PICO2 "Build project for PICO2 (RP2350) instead of original PICO (RP2040)" OFF)
@@ -92,7 +92,6 @@ add_executable(${BINARY_NAME}
     applebus/abus.c
     applebus/abus_setup.c
     applebus/buffers.c
-    applebus/businterface.c
 
     dvi/a2dvi.c
     dvi/tmds.c
@@ -101,12 +100,14 @@ add_executable(${BINARY_NAME}
     dvi/tmds_dhgr.c
 
     render/render.c
+    render/render_splash.c
     render/render_debug.c
     render/render_text.c
     render/render_lores.c
     render/render_dgr.c
     render/render_hires.c
     render/render_dhgr.c
+    render/render_videx.c
 
     config/config.c
     config/device_regs.c

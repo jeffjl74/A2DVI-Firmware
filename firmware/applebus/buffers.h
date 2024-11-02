@@ -29,7 +29,7 @@ SOFTWARE.
 #include <stdint.h>
 
 extern volatile uint32_t reset_counter;
-extern volatile uint32_t bus_counter;
+extern volatile uint32_t bus_cycle_counter;
 extern volatile uint32_t bus_overflow_counter;
 extern volatile uint32_t frame_counter;
 extern volatile uint32_t devicereg_counter;
@@ -39,6 +39,7 @@ extern volatile uint32_t vblank_counter;
 extern volatile uint16_t last_address_stack;
 extern volatile uint16_t last_address_pc;
 extern volatile uint16_t last_address_zp;
+extern volatile uint32_t last_read_address;
 
 extern          uint32_t boot_time;
 
@@ -46,8 +47,6 @@ extern          uint32_t boot_time;
 extern          uint32_t dbg_counter1;
 extern          uint32_t dbg_counter2;
 #endif
-
-extern volatile uint8_t  reset_state;
 
 extern volatile uint8_t  cardslot;
 
@@ -93,7 +92,7 @@ extern volatile uint32_t internal_flags;
 #define SOFTSW_PAGE_2         0x00000008ul
 
 // Apple IIe/c/gs softswitches
-#define SOFTSW_CXROM          0x00000010ul
+#define SOFTSW_INTCXROM       0x00000010ul
 //                            0x00000020ul
 //                            0x00000040ul
 //                            0x00000080ul
@@ -116,6 +115,7 @@ extern volatile uint32_t internal_flags;
 #define SOFTSW_V7_MODE3       0x00300000ul
 // emulation-specific soft switches
 #define SOFTSW_VIDEX_80COL    0x00400000ul
+#define SOFTSW_MENU_ENABLE    0x00800000ul
 
 #ifdef APPLEIIGS
 #define SOFTSW_NEWVID_MASK    0xE0ul
@@ -125,14 +125,14 @@ extern volatile uint32_t internal_flags;
 
 // internal config switches
 #define IFLAGS_DEBUG_LINES    0x00100000ul
-#define IFLAGS_MENU_ENABLE    0x00200000ul
+//                            0x00200000ul
 #define IFLAGS_FORCED_MONO    0x00400000ul
 #define IFLAGS_SCANLINEEMU    0x00800000ul
 #define IFLAGS_INTERP_DGR     0x01000000ul
 #define IFLAGS_INTERP_DHGR    0x02000000ul
 #define IFLAGS_VIDEO7         0x04000000ul
 //#define IFLAGS_OLDCOLOR       0x08000000ul
-#define IFLAGS_VIDEX          0x10000000ul
+//#define IFLAGS_VIDEX          0x10000000ul
 #define IFLAGS_TEST           0x20000000ul
 #define IFLAGS_IIE_REGS       0x40000000ul
 #define IFLAGS_IIGS_REGS      0x80000000ul
